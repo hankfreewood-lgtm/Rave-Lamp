@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Rave-Lampe</title>
+<style>
+  :root {
+    --bg: #000;
+    --panel: rgba(12, 12, 14, 0.92);
+    --text: #f4f4f5;
+    --muted: #9a9aa3;
+    --line: #2a2a30;
+    --accent: #ffffff;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  :root:not([data-theme="light"]) { color-scheme: dark; }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+
+  /* Blitzfläche: füllt den ganzen Bildschirm */
+  #stage {
+    position: fixed;
+    inset: 0;
+    background: #000;
+  }
+
+  /* Steuerung */
+  #panel {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    padding: 18px 20px calc(18px + env(safe-area-inset-bottom, 0px));
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    border-radius: 22px 22px 0 0;
+    transition: transform .25s ease;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  #panel.hidden { transform: translateY(105%); }
+
+  .readout {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  #hzValue {
+    font-size: 76px;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+    min-width: 2.6ch;
+    text-align: right;
+  }
+  .unit { font-size: 22px; font-weight: 600; color: var(--muted); }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%;
+    height: 44px;
+    background: transparent;
+    margin: 4px 0 0;
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 8px; border-radius: 4px; background: var(--line);
+  }
+  input[type=range]::-moz-range-track {
+    height: 8px; border-radius: 4px; background: var(--line);
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--accent); border: 0; margin-top: -14px;
+    box-shadow: 0 0 0 4px rgba(255,255,255,.12);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--accent); border: 0;
+  }
+  .scale {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: var(--muted);
+    margin: -2px 4px 14px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .colors {
+    display: flex; gap: 10px; justify-content: center; margin-bottom: 14px;
+  }
+  .swatch {
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 3px solid transparent;
+    padding: 0; cursor: pointer;
+    outline-offset: 3px;
+  }
+  .swatch[aria-checked="true"] { border-color: #fff; }
+  .swatch:focus-visible { outline: 2px solid #fff; }
+
+  .row { display: flex; gap: 10px; }
+  #toggle {
+    flex: 1;
+    height: 64px;
+    border: 0; border-radius: 16px;
+    font-size: 20px; font-weight: 800;
+    background: #fff; color: #000;
+    cursor: pointer;
+  }
+  #toggle[aria-pressed="true"] { background: #ff2d55; color: #fff; }
+  #toggle:focus-visible, .ghost:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  .ghost {
+    height: 64px; padding: 0 16px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: transparent; color: var(--text);
+    font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+
+  .opts {
+    display: flex; flex-direction: column; gap: 4px; margin-top: 12px;
+    font-size: 14px; color: var(--muted);
+  }
+  .opt { display: flex; align-items: center; gap: 10px; min-height: 36px; }
+  .opt input { width: 20px; height: 20px; accent-color: #fff; }
+  #msg { font-size: 13px; color: #ffb020; min-height: 1.2em; margin-top: 4px; }
+
+  /* Tipp, wenn Panel ausgeblendet */
+  #tip {
+    position: fixed; left: 0; right: 0;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    text-align: center; font-size: 13px; color: rgba(255,255,255,.45);
+    pointer-events: none; opacity: 0; transition: opacity .25s;
+    mix-blend-mode: difference;
+  }
+  #panel.hidden ~ #tip { opacity: 1; }
+
+  /* Warnhinweis */
+  #warn {
+    position: fixed; inset: 0; z-index: 10;
+    background: #000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  #warn[hidden] { display: none; }
+  .warncard { max-width: 420px; }
+  .warncard h1 { font-size: 26px; margin: 0 0 12px; letter-spacing: -0.01em; }
+  .warncard p { color: #c9c9d0; line-height: 1.5; margin: 0 0 12px; font-size: 16px; }
+  .warncard button {
+    margin-top: 8px; width: 100%; height: 56px; border: 0; border-radius: 14px;
+    background: #fff; color: #000; font-size: 17px; font-weight: 800; cursor: pointer;
+  }
+
+  /* Kamera-Dialog */
+  #perm { position: fixed; inset: 0; z-index: 11; background: rgba(0,0,0,.82); display: flex; align-items: center; justify-content: center; padding: 24px; }
+  #perm[hidden] { display: none; }
+  .permcard { max-width: 380px; width: 100%; background: #141417; border: 1px solid var(--line); border-radius: 20px; padding: 22px; }
+  .permcard h2 { font-size: 21px; margin: 0 0 10px; }
+  .permcard p { color: #c9c9d0; line-height: 1.5; margin: 0 0 16px; font-size: 15px; }
+  .permcard .btns { display: flex; gap: 10px; }
+  .permcard button { flex: 1; height: 52px; border-radius: 14px; font-size: 16px; font-weight: 700; cursor: pointer; border: 1px solid var(--line); background: transparent; color: var(--text); }
+  .permcard button.primary { background: #fff; color: #000; border: 0; }
+  .permcard button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #panel, #tip { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage" aria-hidden="true"></div>
+<video id="camvid" muted playsinline style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0"></video>
+
+<section id="panel" aria-label="Steuerung">
+  <div class="readout">
+    <span id="hzValue">3</span><span class="unit">Hz</span>
+  </div>
+  <input id="hz" type="range" min="1" max="10" step="0.5" value="3" aria-label="Frequenz in Hertz">
+  <div class="scale" aria-hidden="true">
+    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+    <span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+  </div>
+
+  <div class="colors" role="radiogroup" aria-label="Blitzfarbe" id="colors"></div>
+
+  <div class="row">
+    <button id="toggle" aria-pressed="false">Start</button>
+    <button id="hide" class="ghost" aria-label="Steuerung ausblenden">Ausblenden</button>
+  </div>
+
+  <div class="opts">
+    <label class="opt"><input type="checkbox" id="useTorch"> Kamera-Blitz mitnutzen (nur Android/Chrome)</label>
+    <label class="opt"><input type="checkbox" id="vib"> Vibration im Takt (nur Android)</label>
+  </div>
+  <div id="msg" role="status"></div>
+</section>
+
+<div id="tip">Tippen zeigt die Steuerung wieder an</div>
+
+<div id="warn">
+  <div class="warncard">
+    <h1>Warnung vor Blitzlicht</h1>
+    <p>Flackerndes Licht kann bei Menschen mit lichtempfindlicher Epilepsie Anfälle auslösen. Nutze die Lampe nicht, wenn du oder jemand in deiner Nähe davon betroffen ist.</p>
+    <p>Schau nicht lange direkt in den Blitz und halte das Handy nicht dicht an fremde Gesichter. Fang mit niedriger Frequenz an.</p>
+    <button id="ok">Verstanden</button>
+  </div>
+</div>
+
+<div id="perm" hidden>
+  <div class="permcard" role="dialog" aria-modal="true" aria-labelledby="permTitle">
+    <h2 id="permTitle">Kamera-Blitz erlauben?</h2>
+    <p id="permText"></p>
+    <div class="btns">
+      <button id="permCancel" type="button">Abbrechen</button>
+      <button id="permAllow" type="button" class="primary">Kamera erlauben</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var COLORS = [
+    { name: "Weiß",   hex: "#ffffff" },
+    { name: "Pink",   hex: "#ff2bd6" },
+    { name: "Cyan",   hex: "#00f0ff" },
+    { name: "Grün",   hex: "#39ff14" },
+    { name: "Rot",    hex: "#ff1e1e" },
+    { name: "Violett", hex: "#8a2bff" }
+  ];
+
+  var stage = document.getElementById("stage");
+  var panel = document.getElementById("panel");
+  var hzInput = document.getElementById("hz");
+  var hzValue = document.getElementById("hzValue");
+  var toggle = document.getElementById("toggle");
+  var hideBtn = document.getElementById("hide");
+  var colorsBox = document.getElementById("colors");
+  var useTorch = document.getElementById("useTorch");
+  var vib = document.getElementById("vib");
+  var msg = document.getElementById("msg");
+  var warn = document.getElementById("warn");
+
+  var color = COLORS[0].hex;
+  var hz = 3;
+  var running = false;
+  var rafId = null;
+  var startTime = 0;
+  var lastOn = null;
+  var wakeLock = null;
+  var torchTrack = null;
+  var torchStream = null;
+
+  // Farbauswahl
+  COLORS.forEach(function (c, i) {
+    var b = document.createElement("button");
+    b.className = "swatch";
+    b.type = "button";
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-label", c.name);
+    b.setAttribute("aria-checked", i === 0 ? "true" : "false");
+    b.style.background = c.hex;
+    b.addEventListener("click", function () {
+      color = c.hex;
+      Array.prototype.forEach.call(colorsBox.children, function (el) {
+        el.setAttribute("aria-checked", el === b ? "true" : "false");
+      });
+      if (running && lastOn) stage.style.background = color;
+    });
+    colorsBox.appendChild(b);
+  });
+
+  function setMsg(t) { msg.textContent = t || ""; }
+
+  function updateHz() {
+    hz = parseFloat(hzInput.value);
+    hzValue.textContent = (hz % 1 === 0) ? String(hz) : hz.toFixed(1).replace(".", ",");
+  }
+  hzInput.addEventListener("input", updateHz);
+  updateHz();
+
+  // Kamera-Blitz (Torch)
+  function setupTorch() {
+    if (torchTrack) return Promise.resolve(true);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setMsg("Kamera-Blitz wird auf diesem Gerät nicht unterstützt.");
+      return Promise.resolve(false);
+    }
+    return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 320 }, height: { ideal: 240 } }, audio: false })
+      .then(function (stream) {
+        var track = stream.getVideoTracks()[0];
+        // Stream an ein verstecktes Video hängen: manche Handys brauchen das, damit der Blitz angeht
+        var v = document.getElementById("camvid");
+        v.srcObject = stream;
+        var pl = v.play();
+        if (pl && pl.catch) pl.catch(function () {});
+        return new Promise(function (res) { setTimeout(res, 300); }).then(function () {
+          var caps = track.getCapabilities ? track.getCapabilities() : {};
+          // Blitz testweise einschalten, das zeigt, ob er steuerbar ist
+          return track.applyConstraints({ advanced: [{ torch: true }] }).then(function () {
+            torchStream = stream;
+            torchTrack = track;
+            return true;
+          }).catch(function (e) {
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            v.srcObject = null;
+            setMsg("Blitz nicht steuerbar (" + (e && e.name ? e.name : "Fehler") + (caps.torch ? "" : ", kein Torch-Support") + "). Der Bildschirm blitzt trotzdem.");
+            return false;
+          });
+        });
+      })
+      .catch(function (err) {
+        camDenied = !!(err && (err.name === "NotAllowedError" || err.name === "SecurityError"));
+        setMsg(camDenied ? "Kamerazugriff nicht erlaubt. Der Bildschirm blitzt trotzdem." : "Keine Kamera gefunden. Der Bildschirm blitzt trotzdem.");
+        return false;
+      });
+  }
+  function releaseTorch() {
+    if (torchTrack) {
+      try { torchTrack.applyConstraints({ advanced: [{ torch: false }] }); } catch (e) {}
+    }
+    if (torchStream) torchStream.getTracks().forEach(function (t) { t.stop(); });
+    torchTrack = null; torchStream = null;
+  }
+  var torchBusy = false, torchWant = false;
+  function torch(on) {
+    torchWant = on;
+    if (!torchTrack || !useTorch.checked || torchBusy) return;
+    torchBusy = true;
+    torchTrack.applyConstraints({ advanced: [{ torch: on }] })
+      .catch(function () {})
+      .then(function () {
+        torchBusy = false;
+        if (torchTrack && useTorch.checked && torchWant !== on) torch(torchWant);
+      });
+  }
+
+  // Bildschirm anlassen
+  function lockScreen() {
+    if (navigator.wakeLock && navigator.wakeLock.request) {
+      navigator.wakeLock.request("screen").then(function (l) { wakeLock = l; }).catch(function () {});
+    }
+  }
+  function unlockScreen() {
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && running) lockScreen();
+    if (document.visibilityState === "hidden" && running) stop();
+  });
+
+  // Blitz-Schleife: 50 % an, 50 % aus; Takt aus der Systemzeit, damit Frequenzwechsel sauber laufen
+  var phaseOffset = 0;
+  var lastT = 0;
+  var phase = 0;
+  function loop(now) {
+    if (!running) return;
+    var dt = (now - lastT) / 1000;
+    lastT = now;
+    phase = (phase + dt * hz) % 1;
+    var on = phase < 0.5;
+    if (on !== lastOn) {
+      lastOn = on;
+      stage.style.background = on ? color : "#000";
+      torch(on);
+      if (on && vib.checked && navigator.vibrate) navigator.vibrate(Math.min(40, 500 / hz));
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function start() {
+    running = true;
+    lastOn = null;
+    phase = 0;
+    lastT = performance.now();
+    toggle.textContent = "Stopp";
+    toggle.setAttribute("aria-pressed", "true");
+    setMsg("");
+    lockScreen();
+    var p = useTorch.checked ? setupTorch() : Promise.resolve(false);
+    p.then(function () {
+      if (!running) return;
+      lastT = performance.now();
+      rafId = requestAnimationFrame(loop);
+    });
+  }
+
+  function stop() {
+    running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    stage.style.background = "#000";
+    torch(false);
+    releaseTorch();
+    unlockScreen();
+    if (navigator.vibrate) navigator.vibrate(0);
+    toggle.textContent = "Start";
+    toggle.setAttribute("aria-pressed", "false");
+    panel.classList.remove("hidden");
+  }
+
+  toggle.addEventListener("click", function () { running ? stop() : start(); });
+
+  // Dialog für die Kamera-Erlaubnis
+  var perm = document.getElementById("perm");
+  var permText = document.getElementById("permText");
+  var permAllow = document.getElementById("permAllow");
+  var permCancel = document.getElementById("permCancel");
+  var camDenied = false;
+
+  function openPerm(denied) {
+    permText.textContent = denied
+      ? "Der Zugriff ist gesperrt. Tippe in der Adressleiste auf das Schloss- oder Einstellungssymbol, wähle Berechtigungen, stelle Kamera auf Erlauben und lade die Seite neu. Läuft die Lampe in der Claude-App, öffne den Link direkt in Chrome."
+      : "Für den Blitz der Handy-Kamera braucht die Lampe Zugriff auf die Kamera. Es wird nichts aufgenommen. Tippe auf Kamera erlauben und bestätige die Anfrage deines Browsers.";
+    var embedded = false;
+    try { embedded = window.self !== window.top; } catch (e) { embedded = true; }
+    if (embedded) {
+      permText.textContent += " Hinweis: Die Seite läuft gerade eingebettet in einer anderen Seite. Dort ist die Kamera meist gesperrt. Öffne die Lampe als eigene Seite direkt in Chrome.";
+    }
+    permAllow.textContent = denied ? "Erneut versuchen" : "Kamera erlauben";
+    perm.hidden = false;
+  }
+  function closePerm() { perm.hidden = true; }
+
+  function tryCam() {
+    camDenied = false;
+    return setupTorch().then(function (ok) {
+      if (ok) {
+        closePerm();
+        if (!running) releaseTorch();
+        setMsg("Kamera-Blitz ist bereit.");
+        return true;
+      }
+      if (camDenied) { openPerm(true); }
+      else { closePerm(); useTorch.checked = false; }
+      return false;
+    });
+  }
+
+  function checkCam() {
+    if (torchTrack) return Promise.resolve(true);
+    if (navigator.permissions && navigator.permissions.query) {
+      return navigator.permissions.query({ name: "camera" }).then(function (st) {
+        if (st.state === "granted") return tryCam();
+        openPerm(st.state === "denied");
+        return false;
+      }).catch(function () { openPerm(false); return false; });
+    }
+    openPerm(false);
+    return Promise.resolve(false);
+  }
+
+  permAllow.addEventListener("click", function () { tryCam(); });
+  permCancel.addEventListener("click", function () {
+    closePerm();
+    useTorch.checked = false;
+    setMsg("");
+  });
+
+  useTorch.addEventListener("change", function () {
+    if (!useTorch.checked) { torch(false); releaseTorch(); setMsg(""); }
+    else checkCam();
+  });
+
+  // Steuerung aus- und einblenden
+  hideBtn.addEventListener("click", function () { panel.classList.add("hidden"); });
+  stage.addEventListener("click", function () { panel.classList.toggle("hidden"); });
+  document.getElementById("tip").addEventListener("click", function () { panel.classList.remove("hidden"); });
+
+  document.getElementById("ok").addEventListener("click", function () {
+    warn.hidden = true;
+  });
+})();
+</script>
+</body>
+</html>
