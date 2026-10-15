@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Rave-Lampe</title>
 <style>
   :root {
@@ -476,6 +481,19 @@
   document.getElementById("ok").addEventListener("click", function () {
     warn.hidden = true;
   });
+})();
+</script>
+<script>
+// Service Worker: macht die Seite als App installierbar (nur auf eigener HTTPS-Seite, nicht eingebettet)
+(function () {
+  try {
+    var embedded = window.self !== window.top;
+    if (!embedded && "serviceWorker" in navigator && location.protocol === "https:") {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("sw.js").catch(function () {});
+      });
+    }
+  } catch (e) {}
 })();
 </script>
 </body>
