@@ -186,7 +186,6 @@
 <body>
 
 <div id="stage" aria-hidden="true"></div>
-<video id="camvid" muted playsinline style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0"></video>
 
 <section id="panel" aria-label="Steuerung">
   <div class="readout">
@@ -302,27 +301,18 @@
       setMsg("Kamera-Blitz wird auf diesem Gerät nicht unterstützt.");
       return Promise.resolve(false);
     }
-    return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 320 }, height: { ideal: 240 } }, audio: false })
+    return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } })
       .then(function (stream) {
         var track = stream.getVideoTracks()[0];
-        // Stream an ein verstecktes Video hängen: manche Handys brauchen das, damit der Blitz angeht
-        var v = document.getElementById("camvid");
-        v.srcObject = stream;
-        var pl = v.play();
-        if (pl && pl.catch) pl.catch(function () {});
-        return new Promise(function (res) { setTimeout(res, 300); }).then(function () {
-          var caps = track.getCapabilities ? track.getCapabilities() : {};
-          // Blitz testweise einschalten, das zeigt, ob er steuerbar ist
-          return track.applyConstraints({ advanced: [{ torch: true }] }).then(function () {
-            torchStream = stream;
-            torchTrack = track;
-            return true;
-          }).catch(function (e) {
-            stream.getTracks().forEach(function (t) { t.stop(); });
-            v.srcObject = null;
-            setMsg("Blitz nicht steuerbar (" + (e && e.name ? e.name : "Fehler") + (caps.torch ? "" : ", kein Torch-Support") + "). Der Bildschirm blitzt trotzdem.");
-            return false;
-          });
+        // Blitz testweise einschalten, das zeigt, ob er steuerbar ist
+        return track.applyConstraints({ advanced: [{ torch: true }] }).then(function () {
+          torchStream = stream;
+          torchTrack = track;
+          return true;
+        }).catch(function (e) {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          setMsg("Blitz nicht steuerbar (" + (e && e.name ? e.name : "Fehler") + "). Der Bildschirm blitzt trotzdem.");
+          return false;
         });
       })
       .catch(function (err) {
